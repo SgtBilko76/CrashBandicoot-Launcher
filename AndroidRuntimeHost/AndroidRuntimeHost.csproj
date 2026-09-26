@@ -7,10 +7,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationId>io.github.matteo842.crashlauncher.runtime</ApplicationId>
-    <ApplicationVersion>14</ApplicationVersion>
-    <ApplicationDisplayVersion>1.9.4</ApplicationDisplayVersion>
+    <ApplicationVersion>15</ApplicationVersion>
+    <ApplicationDisplayVersion>2.0.0-beta.1</ApplicationDisplayVersion>
     <AndroidLinkMode>None</AndroidLinkMode>
-    <!-- The Mono interpreter does not lower Volatile.ReadBarrier on this path;
+    <!-- CoreCLR instead of Mono (experimental in .NET 10, warning XA1040). Its
+         JIT runs the recompiled game code about twice as fast and the native
+         widescreen pass about five times as fast on Quest 3, and the on-device
+         Roslyn prepare drops from minutes to under half a minute. Pass
+         -p:UseMonoRuntime=true to build the previous Mono APK. -->
+    <UseMonoRuntime>false</UseMonoRuntime>
+    <!-- CoreCLR Release defaults to ReadyToRun, and SDK 36.1.69 then fails
+         (XALNS7015 "Writing mixed-mode assemblies is not supported") when its
+         assembly rewriter reaches the R2R images. Everything is JIT-compiled. -->
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <!-- Mono only (ignored by CoreCLR): the Mono interpreter does not lower Volatile.ReadBarrier on this path;
          Roslyn and the generated game assembly must run through the Android JIT. -->
     <AndroidUseInterpreter>false</AndroidUseInterpreter>
     <!-- Release AOT crashes on LibObjectFile (MonoType 0). The game assembly is
@@ -44,6 +54,35 @@
     <PackageReference Include="Silk.NET.OpenAL.Soft.Native" Version="1.23.1" ExcludeAssets="native" />
     <PackageReference Include="Silk.NET.Windowing.Sdl" Version="2.22.0" ExcludeAssets="build;buildTransitive;native" />
   </ItemGroup>
+
+  <!-- Meta Quest: libcrashxr.so presents the game through OpenXR. It is built
+       from source with the NDK the Android SDK resolves; the Khronos loader
+       it links against ships prebuilt in Native/arm64-v8a. -->
+  <PropertyGroup>
+    <CrashXrSource>$(MSBuildProjectDirectory)/QuestVr/Native/crashxr.c</CrashXrSource>
+    <CrashXrOutput>$(MSBuildProjectDirectory)/$(BaseIntermediateOutputPath)crashxr/arm64-v8a/libcrashxr.so</CrashXrOutput>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AndroidNativeLibrary Include="$(CrashXrOutput)" Abi="arm64-v8a" />
+  </ItemGroup>
+
+  <Target Name="BuildCrashXr" BeforeTargets="BeforeBuild" DependsOnTargets="_ResolveSdks"
+          Inputs="$(CrashXrSource)" Outputs="$(CrashXrOutput)">
+    <PropertyGroup>
+      <_CrashXrNdk>$(_AndroidNdkDirectory)</_CrashXrNdk>
+      <_CrashXrNdk Condition="'$(_CrashXrNdk)' == ''">$(AndroidNdkDirectory)</_CrashXrNdk>
+      <_CrashXrHost Condition="$([MSBuild]::IsOSPlatform('Windows'))">windows-x86_64</_CrashXrHost>
+      <_CrashXrHost Condition="$([MSBuild]::IsOSPlatform('OSX'))">darwin-x86_64</_CrashXrHost>
+      <_CrashXrHost Condition="'$(_CrashXrHost)' == ''">linux-x86_64</_CrashXrHost>
+      <_CrashXrClang>$([MSBuild]::EnsureTrailingSlash($(_CrashXrNdk)))toolchains/llvm/prebuilt/$(_CrashXrHost)/bin/aarch64-linux-android29-clang</_CrashXrClang>
+      <_CrashXrClang Condition="$([MSBuild]::IsOSPlatform('Windows'))">$(_CrashXrClang).cmd</_CrashXrClang>
+    </PropertyGroup>
+    <Error Condition="'$(_CrashXrNdk)' == '' Or !Exists('$(_CrashXrClang)')"
+           Text="The Android NDK is required to build the Meta Quest presenter (libcrashxr.so). Install it from the Android SDK manager." />
+    <MakeDir Directories="$([System.IO.Path]::GetDirectoryName('$(CrashXrOutput)'))" />
+    <Exec Command="&quot;$(_CrashXrClang)&quot; -shared -fPIC -O2 -fvisibility=hidden -I&quot;$(MSBuildProjectDirectory)/QuestVr/Native/include&quot; &quot;$(CrashXrSource)&quot; -L&quot;$(MSBuildProjectDirectory)/Native/arm64-v8a&quot; -lopenxr_loader -lEGL -lGLESv3 -llog -lm -Wl,-z,max-page-size=16384 -o &quot;$(CrashXrOutput)&quot;" />
+  </Target>
 
   <ItemGroup>
     <Compile Include="..\CrashBandicoot.Launcher\Recomp\DiscValidator.cs" Link="Shared\DiscValidator.cs" />

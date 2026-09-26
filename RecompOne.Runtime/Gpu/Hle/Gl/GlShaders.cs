@@ -85,9 +85,17 @@ internal static class GlShaders
         uniform vec2 uVertexOffset;
         uniform vec2 uPosBias;
         uniform vec2 uFbInv;
+        // Right-eye replay: x = display-pixel shift at infinity, y = GTE Z on
+        // the screen plane. Zero separation is the ordinary (left-eye) pass.
+        // Nearer than the plane shifts the other way, capped at twice the
+        // far shift so close polygons cannot leap across the frame.
+        uniform vec2 uStereo;
 
         void main() {
-            vec2 p = (inPos + uVertexOffset + uPosBias) * uFbInv - 1.0;
+            vec2 pos = inPos;
+            if (uStereo.x != 0.0 && inInvZ > 0.0)
+                pos.x += clamp(uStereo.x * (1.0 - uStereo.y * inInvZ), -2.0 * uStereo.x, uStereo.x);
+            vec2 p = (pos + uVertexOffset + uPosBias) * uFbInv - 1.0;
             // Keep the entire near-clipped Crash world inside the usable depth
             // range. A scale of 256 collapsed Z=near..256 to exactly zero, so
             // unrelated close polygons became equal and allocation order won.

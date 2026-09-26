@@ -5,6 +5,7 @@ using Android.Content.Res;
 using Android.OS;
 using Android.Views;
 using Android.Widget;
+using CrashBandicoot.AndroidRuntime.QuestVr;
 using CrashBandicoot.Launcher.Recomp;
 using RecompOne.Runtime;
 using RecompOne.Runtime.Config;
@@ -90,7 +91,33 @@ public sealed class MainActivity : Activity
         if (TryUseLocalDiscCopy())
             return;
 
-        TryRestoreSavedDisc();
+        if (!TryApplyDiscFromIntent())
+            TryRestoreSavedDisc();
+
+        // ADB automation, useful on a headset where the panel is hard to reach:
+        //   am start -n <pkg>/<activity> --es disc_path /sdcard/…/game.cue --ez autostart true
+        if (_disc != null && Intent?.GetBooleanExtra(AutoStartExtra, false) == true)
+            _ = StartGameAsync();
+    }
+
+    const string DiscPathExtra = "disc_path";
+    const string AutoStartExtra = "autostart";
+
+    bool TryApplyDiscFromIntent()
+    {
+        var path = Intent?.GetStringExtra(DiscPathExtra);
+        if (string.IsNullOrWhiteSpace(path) || !AndroidStorageAccess.HasFullAccess(this))
+            return false;
+
+        string? bin = null;
+        if (!path.EndsWith(".chd", StringComparison.OrdinalIgnoreCase))
+        {
+            var sheet = DiscValidator.ParseCueSheet(path);
+            if (!sheet.Ok) return false;
+            bin = sheet.BinPath;
+        }
+        ApplyDiscFiles(path, bin);
+        return _disc != null;
     }
 
     void ShowLauncherUi()
@@ -501,6 +528,7 @@ public sealed class MainActivity : Activity
         _launcher?.SetBusy(true, "Opening the bundled runtime and preparing the game files.");
         ShowGameUi();
         _progress.Visibility = ViewStates.Visible;
+        var launchedVr = false;
 
         try
         {
@@ -564,9 +592,24 @@ public sealed class MainActivity : Activity
                     GameStore.WriteManifest(validation.Fingerprint, cuePath, validation.BinPath, gameDll);
                 }
 
+                if (QuestDevice.IsQuest(this))
+                {
+                    // The headset runs the core in the immersive activity.
+                    SetStatus("Entering VR…");
+                    launchedVr = true;
+                    RunOnUiThread(() => VrGameActivity.Launch(this, gameDll, cuePath));
+                    return;
+                }
+
                 SetStatus("Starting the PS1 core…");
                 RunGameCore(gameDll, cuePath);
             });
+
+            if (launchedVr)
+            {
+                _progress.Visibility = ViewStates.Gone;
+                ShowLauncherUi();
+            }
         }
         catch (Exception ex)
         {
@@ -674,6 +717,31 @@ public sealed class MainActivity : Activity
         AndroidMods.SeedBundledSamples(this);
         AppPaths.EnsureCreated();
         ConfigManager.Load();
+
+        // ADB: --ei internal_resolution <1|2|4|8> saves the renderer scale, as Settings does.
+        var resolution = Intent?.GetIntExtra("internal_resolution", 0) ?? 0;
+        if (resolution > 0)
+        {
+            ConfigManager.View.InternalResolution = resolution;
+            ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());
+            Android.Util.Log.Info("CrashGPU", $"internal resolution set to {ConfigManager.View.InternalResolution}x");
+        }
+
+        // ADB: --ez widescreen <true|false> saves the 16:9 setting, as Settings does.
+        if (Intent?.HasExtra("widescreen") == true)
+        {
+            ConfigManager.View.Widescreen = Intent.GetBooleanExtra("widescreen", false);
+            ConfigManager.SaveView(Array.Empty<RecompOne.Runtime.Host.Window.IPanel>());
+            Android.Util.Log.Info("CrashGPU", $"widescreen {(ConfigManager.View.Widescreen ? "on" : "off")}");
+        }
+
+        // ADB: --ei depth_3d <0..100> saves the Quest 3D depth, as VR Controls does.
+        var depth3D = Intent?.GetIntExtra("depth_3d", -1) ?? -1;
+        if (depth3D >= 0 && QuestDevice.IsQuest(this))
+        {
+            new QuestVrSettings(this).SetDepth3D(depth3D);
+            Android.Util.Log.Info("CrashXR", $"3D depth set to {depth3D}%");
+        }
 
         // A phone game should start immersive unless the user explicitly changes it.
         if (!ConfigManager.View.Values.ContainsKey("Fullscreen"))

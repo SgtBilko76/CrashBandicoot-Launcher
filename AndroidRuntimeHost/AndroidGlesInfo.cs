@@ -31,7 +31,7 @@ sealed class AndroidGlesInfo
         _ => "fallback",
     };
 
-    public static AndroidGlesInfo Capture(GL gl, AndroidEglContext egl, string? forcedPath = null)
+    public static AndroidGlesInfo Capture(GL gl, Silk.NET.Core.Contexts.INativeContext egl, string? forcedPath = null)
     {
         var extensions = ReadString(gl, StringName.Extensions);
         var extensionSet = new HashSet<string>(

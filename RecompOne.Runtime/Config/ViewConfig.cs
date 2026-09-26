@@ -45,7 +45,7 @@ public class ViewConfig
     }
 
     /// <summary>Allowed internal render scales (1 = native PS1, 8 ≈ 4K).</summary>
-    public static readonly int[] InternalResolutionOptions = [1, 2, 4, 8];
+    public static readonly int[] InternalResolutionOptions = [1, 2, 3, 4, 8];
 
     /// <summary>
     /// GPU internal resolution multiplier. 1 = native, 4 = previous default, 8 ≈ 4K.
@@ -87,6 +87,7 @@ public class ViewConfig
     {
         if (value <= 1) return 1;
         if (value <= 2) return 2;
+        if (value <= 3) return 3;
         if (value <= 4) return 4;
         return 8;
     }

@@ -66,7 +66,14 @@ public sealed partial class Gpu
             }
         }
         else
-            be.DrawTri(HV(a, sub, false), HV(b, sub, false), HV(c, sub, false), flags);
+        {
+            // Stereo needs the depth of ordinary world triangles too. Depth
+            // testing stays off for these modes, so it only drives the eye shift.
+            bool stereoZ = GpuHle.StereoActive && GpuHle.CurrentPrimitiveKind != GpuHle.PrimitiveKind.Hud &&
+                           a.HasGteZ && b.HasGteZ && c.HasGteZ;
+            if (stereoZ) GpuHle.RecordStereoDepth(a.GteZ);
+            be.DrawTri(HV(a, sub, stereoZ), HV(b, sub, stereoZ), HV(c, sub, stereoZ), flags);
+        }
     }
 
     void HleRect(int x, int y, int w, int h, int u, int v, int clut, int r, int g, int b, bool tex, bool semi, bool raw)

@@ -14,6 +14,7 @@ internal sealed class RenderingDevMenuSection : IDevMenuSection
     [
         "Native (1x)",
         "2x",
+        "3x",
         "4x",
         "8x (4K)",
     ];
@@ -156,6 +157,6 @@ internal sealed class RenderingDevMenuSection : IDevMenuSection
         var opts = ViewConfig.InternalResolutionOptions;
         for (int i = 0; i < opts.Length; i++)
             if (opts[i] == scale) return i;
-        return 2;
+        return Array.IndexOf(opts, 4); // 4x
     }
 }

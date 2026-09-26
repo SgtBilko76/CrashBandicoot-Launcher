@@ -686,7 +686,12 @@ sealed class LauncherScreen : View
                 StartGameRequested?.Invoke();
                 break;
             case 1:
-                Post(() => TouchControlsDialog.Show(_activity));
+                // On a headset the touch overlay does not exist; Controls maps the Touch controllers.
+                Post(() =>
+                {
+                    if (QuestVr.QuestDevice.IsQuest(_activity)) QuestVr.QuestControlsDialog.Show(_activity);
+                    else TouchControlsDialog.Show(_activity);
+                });
                 break;
             case 2:
                 SettingsRequested?.Invoke();

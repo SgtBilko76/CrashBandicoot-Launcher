@@ -8,11 +8,11 @@ namespace CrashBandicoot.AndroidRuntime;
 
 static class TouchControlsDialog
 {
-    static readonly Color Night = Color.Rgb(6, 16, 24);
-    static readonly Color Card = Color.Rgb(11, 35, 27);
-    static readonly Color Wumpa = Color.Rgb(255, 138, 0);
-    static readonly Color Sand = Color.Rgb(244, 228, 188);
-    static readonly Color Muted = Color.Rgb(177, 188, 188);
+    internal static readonly Color Night = Color.Rgb(6, 16, 24);
+    internal static readonly Color Card = Color.Rgb(11, 35, 27);
+    internal static readonly Color Wumpa = Color.Rgb(255, 138, 0);
+    internal static readonly Color Sand = Color.Rgb(244, 228, 188);
+    internal static readonly Color Muted = Color.Rgb(177, 188, 188);
 
     public static void Show(Activity activity)
     {
@@ -193,7 +193,7 @@ static class TouchControlsDialog
             (int)((activity.Resources?.DisplayMetrics?.HeightPixels ?? 900) * 0.86f), 0.72f);
     }
 
-    static void AddSlider(
+    internal static void AddSlider(
         Activity activity,
         LinearLayout parent,
         string name,
@@ -233,7 +233,7 @@ static class TouchControlsDialog
             ViewGroup.LayoutParams.MatchParent, Dp(activity, 30)));
     }
 
-    static TextView Text(Activity activity, string value, float size, Color color, Typeface font)
+    internal static TextView Text(Activity activity, string value, float size, Color color, Typeface font)
     {
         var text = new TextView(activity)
         {
@@ -247,7 +247,7 @@ static class TouchControlsDialog
         return text;
     }
 
-    static Button Button(Activity activity, string value, Typeface font)
+    internal static Button Button(Activity activity, string value, Typeface font)
     {
         var button = new Button(activity)
         {
@@ -265,14 +265,14 @@ static class TouchControlsDialog
         return button;
     }
 
-    static LinearLayout.LayoutParams WeightedButtonLayout(Activity activity) =>
+    internal static LinearLayout.LayoutParams WeightedButtonLayout(Activity activity) =>
         new(0, ViewGroup.LayoutParams.MatchParent, 1f)
         {
             LeftMargin = Dp(activity, 3),
             RightMargin = Dp(activity, 3),
         };
 
-    static void ConfigureWindow(Dialog dialog, Activity activity, float widthFraction, int height, float dim)
+    internal static void ConfigureWindow(Dialog dialog, Activity activity, float widthFraction, int height, float dim)
     {
         if (dialog.Window == null) return;
         dialog.Window.SetBackgroundDrawable(new ColorDrawable(Color.Transparent));
@@ -283,7 +283,7 @@ static class TouchControlsDialog
         dialog.Window.SetGravity(GravityFlags.Center);
     }
 
-    static GradientDrawable RoundedBackground(
+    internal static GradientDrawable RoundedBackground(
         Color fill, Color stroke, int strokeWidth, float radius)
     {
         var drawable = new GradientDrawable();
@@ -293,10 +293,10 @@ static class TouchControlsDialog
         return drawable;
     }
 
-    static int Dp(Activity activity, float value) =>
+    internal static int Dp(Activity activity, float value) =>
         (int)(value * (activity.Resources?.DisplayMetrics?.Density ?? 1f) + 0.5f);
 
-    static Typeface LoadTypeface(Activity activity, string assetPath, Typeface fallback)
+    internal static Typeface LoadTypeface(Activity activity, string assetPath, Typeface fallback)
     {
         try { return Typeface.CreateFromAsset(activity.Assets, assetPath) ?? fallback; }
         catch { return fallback; }

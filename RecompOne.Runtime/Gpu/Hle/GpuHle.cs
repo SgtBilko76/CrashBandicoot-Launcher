@@ -48,6 +48,39 @@ public static class GpuHle
             WideWorldFrontSign = positive > negative ? 1 : -1;
     }
 
+    /// <summary>
+    /// Stereo 3D for VR hosts. Every display render target gets a right-eye
+    /// companion; each batch is replayed into it with vertices shifted by
+    /// <c>StereoSeparation × (1 − StereoConvergenceZ / z)</c> display pixels,
+    /// using the GTE depth of the vertex. Vertices without GTE depth (HUD,
+    /// sprites, 2D) stay at screen depth. The left eye is the normal image.
+    /// </summary>
+    public static bool StereoActive { get; set; }
+
+    /// <summary>Right-eye shift in display pixels for geometry at infinity.</summary>
+    public static float StereoSeparation { get; set; }
+
+    /// <summary>GTE Z (screen-Z units) that lands exactly on the screen plane.</summary>
+    public static float StereoConvergenceZ { get; set; } = 1024f;
+
+    // Coarse log2 histogram of world-vertex GTE depth, for choosing the
+    // convergence plane. Bucket i holds depths in [2^i, 2^(i+1)).
+    static readonly int[] _stereoDepthBuckets = new int[17];
+
+    public static void RecordStereoDepth(float z)
+    {
+        int bucket = z < 1f ? 0 : Math.Min(16, (int)MathF.Log2(z));
+        _stereoDepthBuckets[bucket]++;
+    }
+
+    /// <summary>Copies and clears the histogram. Game thread only.</summary>
+    public static int[] TakeStereoDepthHistogram()
+    {
+        var copy = (int[])_stereoDepthBuckets.Clone();
+        Array.Clear(_stereoDepthBuckets);
+        return copy;
+    }
+
     public static float WideAspect { get; set; }
     public static float OutputAspect { get; set; } = 4f / 3f;
     public static bool NativeResolution { get; set; }

@@ -353,8 +353,19 @@ public static partial class FramePacing
 
     public static void PostGpuUpdate(CpuContext c, IMemory m) => FinishGpuUpdate(m);
 
+    /// <summary>
+    /// Development aid: the level id the game's first NsInit loads instead of
+    /// its own choice (0 = no override). Consumed once, like WideCheck's --level.
+    /// </summary>
+    public static uint BootLevelOverride { get; set; }
+
     public static bool PreNsInit(CpuContext c, IMemory m)
     {
+        if (BootLevelOverride != 0)
+        {
+            c.A1 = BootLevelOverride;
+            BootLevelOverride = 0;
+        }
         RestoreNativeWideObjectFrustum(m);
         ResetNativeWideRenderer();
         _inNsInit = true;

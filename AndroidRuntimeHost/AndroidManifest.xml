@@ -4,6 +4,24 @@
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
   <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
   <uses-feature android:name="android.hardware.gamepad" android:required="false" />
+
+  <!-- Meta Quest: the game runs in an OpenXR activity (QuestVr/). Head
+       tracking stays optional so the same APK installs on phones. -->
+  <uses-feature android:name="android.hardware.vr.headtracking" android:required="false" android:version="1" />
+  <uses-feature android:name="oculus.software.handtracking" android:required="false" />
+  <uses-feature android:name="com.oculus.feature.PASSTHROUGH" android:required="false" />
+  <uses-permission android:name="org.khronos.openxr.permission.OPENXR" />
+  <uses-permission android:name="org.khronos.openxr.permission.OPENXR_SYSTEM" />
+  <!-- Lets the OpenXR loader find the runtime on Android 11 and newer. -->
+  <queries>
+    <provider android:authorities="org.khronos.openxr.runtime_broker;org.khronos.openxr.system_runtime_broker" />
+    <intent>
+      <action android:name="org.khronos.openxr.OpenXRRuntimeService" />
+    </intent>
+    <intent>
+      <action android:name="org.khronos.openxr.OpenXRApiLayerService" />
+    </intent>
+  </queries>
   <application
       android:allowBackup="false"
       android:icon="@mipmap/ic_launcher"
@@ -13,6 +31,8 @@
       android:preserveLegacyExternalStorage="true"
       android:supportsRtl="true"
       android:theme="@android:style/Theme.Material.NoActionBar">
+    <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
+    <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
     <meta-data
         android:name="com.google.test.loops"
         android:value="1" />

@@ -234,7 +234,7 @@ public static class DiscValidator
         return $"{volId}|{bootSize}|{bootHash}|{binLen}";
     }
 
-    static (bool Ok, string? BinPath, DiscValidation? Failure) ParseCueSheet(string cuePath)
+    internal static (bool Ok, string? BinPath, DiscValidation? Failure) ParseCueSheet(string cuePath)
     {
         var dir = Path.GetDirectoryName(cuePath) ?? "";
         string? binPath = null;

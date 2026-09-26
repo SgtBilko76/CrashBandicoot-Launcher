@@ -29,6 +29,12 @@ public sealed class GlBackend : IGpuBackend
 
     uint _vao, _vbo, _presentVao, _presentVbo, _progPrim, _progPrimFast, _progPresent, _progPresent24;
     uint _presentFbo, _presentTex;
+    uint _presentFboR, _presentTexR;
+    int _presentRW, _presentRH;
+    bool _presentRNearest;
+    // Stereo shift applied by BindPrimState for the pass being drawn (see GpuHle.StereoActive).
+    float _stereoPassSeparation;
+    bool _warming;
     int _presentW, _presentH, _presentNativeH;
     bool _presentNearest;
     bool _gles;
@@ -51,6 +57,7 @@ public sealed class GlBackend : IGpuBackend
     int _kClipX0, _kClipY0, _kClipX1, _kClipY1;
     int _uTexWindow, _uBlend, _uBlendOpaque, _uSetMask, _uCheckMask, _uPosBias, _uFbInv, _uFilterMode, _uFilterStrength, _uDedither, _uWideMode, _uWideCore;
     int _ufTexWindow, _ufBlendOpaque, _ufSetMask, _ufCheckMask, _ufPosBias, _ufFbInv, _ufFilterMode, _ufFilterStrength, _ufDedither, _ufWideMode, _ufWideCore;
+    int _uStereo, _ufStereo;
     int _uPresentOrigin, _uPresentSize, _uPresentTexSize, _uPresent24Origin, _uPresent24Size;
 
     public bool Ready { get; private set; }
@@ -59,6 +66,24 @@ public sealed class GlBackend : IGpuBackend
     public int LastFrameWritebacks { get; private set; }
     public int LastFrameVertices { get; private set; }
     public GlesFramebufferFetchPath FramebufferFetchPath => _glesFramebufferFetchPath;
+
+    /// <summary>
+    /// Right-eye present texture from the last <see cref="PresentDisplay"/>, or 0 when
+    /// the frame is mono (stereo off, or the display came straight from VRAM).
+    /// Same size and orientation as the returned left-eye texture.
+    /// </summary>
+    public uint LastRightEyeTexture { get; private set; }
+
+    long _flushLeftTicks, _flushRightTicks;
+
+    /// <summary>CPU milliseconds spent submitting batches per eye since the last call. Diagnostics.</summary>
+    public (double left, double right) TakeFlushMs()
+    {
+        double scale = 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+        var result = (_flushLeftTicks * scale, _flushRightTicks * scale);
+        _flushLeftTicks = _flushRightTicks = 0;
+        return result;
+    }
 
     public GlBackend(GL gl) { _gl = gl; _vram = new GlVram(gl); }
 
@@ -107,6 +132,7 @@ public sealed class GlBackend : IGpuBackend
         _uDedither = _gl.GetUniformLocation(_progPrim, "uDedither");
         _uWideMode = _gl.GetUniformLocation(_progPrim, "uWideMode");
         _uWideCore = _gl.GetUniformLocation(_progPrim, "uWideCore");
+        _uStereo = _gl.GetUniformLocation(_progPrim, "uStereo");
 
         _gl.UseProgram(_progPrim);
         _gl.Uniform1(_gl.GetUniformLocation(_progPrim, "uVram"), 0);
@@ -133,6 +159,7 @@ public sealed class GlBackend : IGpuBackend
             _ufDedither = _gl.GetUniformLocation(_progPrimFast, "uDedither");
             _ufWideMode = _gl.GetUniformLocation(_progPrimFast, "uWideMode");
             _ufWideCore = _gl.GetUniformLocation(_progPrimFast, "uWideCore");
+            _ufStereo = _gl.GetUniformLocation(_progPrimFast, "uStereo");
 
             _gl.UseProgram(_progPrimFast);
             _gl.Uniform1(_gl.GetUniformLocation(_progPrimFast, "uVram"), 0);
@@ -242,6 +269,7 @@ public sealed class GlBackend : IGpuBackend
         // as warmup geometry. The dummy draws also stayed in the colour/depth
         // attachments and showed up as 16:9 specks and stretched side-band tris.
         Flush();
+        _warming = true;
 
         var savedTarget = _kTarget;
         var savedMode = _kWideMode;
@@ -288,6 +316,7 @@ public sealed class GlBackend : IGpuBackend
         Flush();
 
         RestoreRtAfterWarmup(rt);
+        _warming = false;
 
         _kTarget = savedTarget;
         _kWideMode = savedMode;
@@ -415,26 +444,30 @@ public sealed class GlBackend : IGpuBackend
         rt.HasWideWorld = GpuHle.NativeWideRendererActive
             || GpuHle.DrawEnvClearsBackground
             || clearColor.HasValue;
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, rt.Fbo);
-
-        // PutDrawEnv already extends the game's background clear across both
-        // margins. Preserve that colour (especially the white distance fog).
-        // Without a background clear, remove last frame's side geometry here.
-        if (clearColor is uint color)
+        foreach (var fbo in stackalloc[] { rt.Fbo, rt.FboR })
         {
-            int s = GlVram.Scale;
-            _gl.ClearColor((color & 255) / 255f, ((color >> 8) & 255) / 255f, ((color >> 16) & 255) / 255f, 0f);
-            _gl.Enable(EnableCap.ScissorTest);
-            _gl.Scissor(0, 0, (uint)(rt.Margin * s), (uint)rt.TexH);
-            _gl.Clear(ClearBufferMask.ColorBufferBit);
-            _gl.Scissor((rt.Margin + rt.W) * s, 0, (uint)(rt.Margin * s), (uint)rt.TexH);
-            _gl.Clear(ClearBufferMask.ColorBufferBit);
-        }
+            if (fbo == 0) continue;
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, fbo);
 
-        _gl.Disable(EnableCap.ScissorTest);
-        _gl.DepthMask(true);
-        float depth = 1f;
-        _gl.ClearBuffer(GLEnum.Depth, 0, &depth);
+            // PutDrawEnv already extends the game's background clear across both
+            // margins. Preserve that colour (especially the white distance fog).
+            // Without a background clear, remove last frame's side geometry here.
+            if (clearColor is uint color)
+            {
+                int s = GlVram.Scale;
+                _gl.ClearColor((color & 255) / 255f, ((color >> 8) & 255) / 255f, ((color >> 16) & 255) / 255f, 0f);
+                _gl.Enable(EnableCap.ScissorTest);
+                _gl.Scissor(0, 0, (uint)(rt.Margin * s), (uint)rt.TexH);
+                _gl.Clear(ClearBufferMask.ColorBufferBit);
+                _gl.Scissor((rt.Margin + rt.W) * s, 0, (uint)(rt.Margin * s), (uint)rt.TexH);
+                _gl.Clear(ClearBufferMask.ColorBufferBit);
+            }
+
+            _gl.Disable(EnableCap.ScissorTest);
+            _gl.DepthMask(true);
+            float depth = 1f;
+            _gl.ClearBuffer(GLEnum.Depth, 0, &depth);
+        }
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
     }
 
@@ -506,6 +539,7 @@ public sealed class GlBackend : IGpuBackend
         _rts[slot] = fresh;
         SyncRtFromVram(fresh, fbX, fbY, fbW, fbH);
         WarmDisplayRt(fresh);
+        if (GpuHle.StereoActive) EnsureStereo(fresh);
         return fresh;
     }
 
@@ -531,9 +565,26 @@ public sealed class GlBackend : IGpuBackend
         int s = GlVram.Scale;
         _gl.Disable(EnableCap.ScissorTest);
         _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, _vram.Fbo);
-        _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, rt.Fbo);
-        _gl.BlitFramebuffer(x0 * s, y0 * s, x1 * s, y1 * s,
-            (x0 - rt.X + rt.Margin) * s, (y0 - rt.Y) * s, (x1 - rt.X + rt.Margin) * s, (y1 - rt.Y) * s,
+        foreach (var fbo in stackalloc[] { rt.Fbo, rt.FboR })
+        {
+            if (fbo == 0) continue;
+            _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo);
+            _gl.BlitFramebuffer(x0 * s, y0 * s, x1 * s, y1 * s,
+                (x0 - rt.X + rt.Margin) * s, (y0 - rt.Y) * s, (x1 - rt.X + rt.Margin) * s, (y1 - rt.Y) * s,
+                ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
+        }
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+    }
+
+    /// <summary>Creates the right-eye companion and seeds it with the left-eye image.</summary>
+    void EnsureStereo(GlDisplayRt rt)
+    {
+        if (rt.FboR != 0 || rt.Fbo == 0) return;
+        rt.CreateStereo(_gl);
+        _gl.Disable(EnableCap.ScissorTest);
+        _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, rt.Fbo);
+        _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, rt.FboR);
+        _gl.BlitFramebuffer(0, 0, rt.TexW, rt.TexH, 0, 0, rt.TexW, rt.TexH,
             ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest);
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
     }
@@ -694,10 +745,14 @@ public sealed class GlBackend : IGpuBackend
     {
         float r = (color15 & 0x1F) / 31f, g = ((color15 >> 5) & 0x1F) / 31f, b = ((color15 >> 10) & 0x1F) / 31f;
         float a = (color15 & 0x8000) != 0 ? 1f : 0f;
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, rt.Fbo);
         _gl.Disable(EnableCap.ScissorTest);
         _gl.ClearColor(r, g, b, a);
-        _gl.Clear(ClearBufferMask.ColorBufferBit);
+        foreach (var fbo in stackalloc[] { rt.Fbo, rt.FboR })
+        {
+            if (fbo == 0) continue;
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, fbo);
+            _gl.Clear(ClearBufferMask.ColorBufferBit);
+        }
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
     }
 
@@ -737,8 +792,10 @@ public sealed class GlBackend : IGpuBackend
         int uDedither = fast ? _ufDedither : _uDedither;
         int uWideMode = fast ? _ufWideMode : _uWideMode;
         int uWideCore = fast ? _ufWideCore : _uWideCore;
+        int uStereo = fast ? _ufStereo : _uStereo;
 
         _gl.UseProgram(program);
+        _gl.Uniform2(uStereo, _stereoPassSeparation, GpuHle.StereoConvergenceZ);
         _gl.BindVertexArray(_vao);
         _gl.ActiveTexture(TextureUnit.Texture0);
         _gl.BindTexture(TextureTarget.Texture2D, _vram.Texture);
@@ -830,6 +887,22 @@ public sealed class GlBackend : IGpuBackend
         return 1;
     }
 
+    // The right eye moves geometry up to one separation to the right (far) or
+    // two to the left (near). Scissor edges inside the frame, such as the 4:3
+    // core beside the widescreen side bands, would otherwise cut it off and
+    // leave a strip nothing draws into. The frame's outer edge still clips.
+    void WidenForStereo(GlDisplayRt rt, Span<ScissorBand> bands, int bandCount)
+    {
+        int far = (int)MathF.Ceiling(Math.Abs(_stereoPassSeparation));
+        for (int i = 0; i < bandCount; i++)
+        {
+            var b = bands[i];
+            if (b.Empty) continue;
+            bands[i] = new ScissorBand(Math.Max(0, b.X0 - 2 * far), b.Y0,
+                Math.Min(rt.Wide1x - 1, b.X1 + far), b.Y1);
+        }
+    }
+
     void DrawScissored(ReadOnlySpan<ScissorBand> bands, int bandCount, int scale, int first, uint count)
     {
         for (int i = 0; i < bandCount; i++)
@@ -850,6 +923,35 @@ public sealed class GlBackend : IGpuBackend
         _frameVertices += _count;
 
         var rt = _kTarget;
+        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
+        _gl.BufferSubData<GlVertex>(BufferTargetARB.ArrayBuffer, 0, _verts.AsSpan(0, _count));
+
+        _stereoPassSeparation = 0f;
+        long leftStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        DrawBatch(rt, rightEye: false);
+        long rightStart = System.Diagnostics.Stopwatch.GetTimestamp();
+        _flushLeftTicks += rightStart - leftStart;
+
+        // Replay the identical batch into the right eye. Only the vertex shader
+        // differs: it shifts each vertex by its GTE depth.
+        bool stereo = rt != null && GpuHle.StereoActive && !_warming && GpuHle.StereoSeparation != 0f;
+        if (stereo)
+        {
+            EnsureStereo(rt!);
+            _stereoPassSeparation = GpuHle.StereoSeparation;
+            DrawBatch(rt, rightEye: true);
+            _stereoPassSeparation = 0f;
+            _flushRightTicks += System.Diagnostics.Stopwatch.GetTimestamp() - rightStart;
+        }
+
+        _gl.Disable(EnableCap.ScissorTest);
+        _gl.DepthMask(true);
+        if (rt != null) { rt.Dirty = true; rt.LastDrawFrame = _frame; }
+        _count = 0;
+    }
+
+    unsafe void DrawBatch(GlDisplayRt? rt, bool rightEye)
+    {
         uint destTex;
         if (rt == null)
         {
@@ -858,9 +960,9 @@ public sealed class GlBackend : IGpuBackend
         }
         else
         {
-            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, rt.Fbo);
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, rightEye ? rt.FboR : rt.Fbo);
             _gl.Viewport(0, 0, (uint)rt.TexW, (uint)rt.TexH);
-            destTex = rt.Tex;
+            destTex = rightEye ? rt.TexR : rt.Tex;
         }
 
         // Display render targets are separate from the PS1 texture VRAM. Most
@@ -906,8 +1008,8 @@ public sealed class GlBackend : IGpuBackend
         int s = GlVram.Scale;
         Span<ScissorBand> bands = stackalloc ScissorBand[2];
         int bandCount = BuildScissorBands(rt, bands);
+        if (rightEye) WidenForStereo(rt!, bands, bandCount);
 
-        _gl.BindBuffer(BufferTargetARB.ArrayBuffer, _vbo);
         bool splitFetch = _glesFramebufferFetchPath != GlesFramebufferFetchPath.None && _progPrimFast != 0 &&
                           rt != null && _kCheckMask == 0 &&
                           (GlVram.Scale >= 8 || IsNativeWideSideDraw(_kWideMode));
@@ -917,7 +1019,6 @@ public sealed class GlBackend : IGpuBackend
             // at opaque/transparent boundaries. This preserves exact primitive
             // order (important on the map) without repeating buffer uploads and
             // uniform setup for every blend-mode change during Crash's spin.
-            _gl.BufferSubData<GlVertex>(BufferTargetARB.ArrayBuffer, 0, _verts.AsSpan(0, _count));
             BindPrimState(true, rt, destTex);
             BindPrimState(false, rt, destTex);
             _gl.Disable(EnableCap.Blend);
@@ -943,7 +1044,6 @@ public sealed class GlBackend : IGpuBackend
         else
         {
             BindPrimState(false, rt, destTex);
-            _gl.BufferSubData<GlVertex>(BufferTargetARB.ArrayBuffer, 0, _verts.AsSpan(0, _count));
 
             // Coarse shading cannot accelerate a mixed framebuffer-fetch shader,
             // but remains useful on the fixed-function fallback.
@@ -1003,11 +1103,6 @@ public sealed class GlBackend : IGpuBackend
 
             if (coarseShading) _glesShadingRate!(0x96A6); // GL_SHADING_RATE_1X1_PIXELS_QCOM
         }
-
-        _gl.Disable(EnableCap.ScissorTest);
-        _gl.DepthMask(true);
-        if (rt != null) { rt.Dirty = true; rt.LastDrawFrame = _frame; }
-        _count = 0;
     }
 
     bool BatchSamplesVram()
@@ -1153,6 +1248,18 @@ public sealed class GlBackend : IGpuBackend
         }
         _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
 
+        // Same pass from the right-eye companion. A display read straight from
+        // VRAM (or a 24-bit movie) has no depth and stays mono.
+        LastRightEyeTexture = 0;
+        if (GpuHle.StereoActive && src is { TexR: not 0 })
+        {
+            EnsurePresentRightSize(fbW, fbH, nearest);
+            _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _presentFboR);
+            _gl.BindTexture(TextureTarget.Texture2D, src.TexR);
+            _gl.DrawArrays(PrimitiveType.TriangleStrip, 0, 4);
+            LastRightEyeTexture = _presentTexR;
+        }
+
         LastFrameFlushes = _frameFlushes;
         LastFrameWritebacks = _frameWritebacks;
         LastFrameVertices = _frameVertices;
@@ -1162,6 +1269,25 @@ public sealed class GlBackend : IGpuBackend
 
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
         return (_presentTex, fbW, fbH, aspect);
+    }
+
+    unsafe void EnsurePresentRightSize(int w, int h, bool nearest)
+    {
+        if (_presentFboR == 0)
+        {
+            _presentTexR = _gl.GenTexture();
+            _presentFboR = _gl.GenFramebuffer();
+        }
+        if (w == _presentRW && h == _presentRH && nearest == _presentRNearest) return;
+        _gl.BindTexture(TextureTarget.Texture2D, _presentTexR);
+        _gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.Rgba8, (uint)w, (uint)h, 0, PixelFormat.Rgba, PixelType.UnsignedByte, null);
+        var filter = nearest ? GLEnum.Nearest : GLEnum.Linear;
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMinFilter, (int)filter);
+        _gl.TexParameter(TextureTarget.Texture2D, TextureParameterName.TextureMagFilter, (int)filter);
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _presentFboR);
+        _gl.FramebufferTexture2D(FramebufferTarget.Framebuffer,
+            FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, _presentTexR, 0);
+        _presentRW = w; _presentRH = h; _presentRNearest = nearest;
     }
 
     unsafe void EnsurePresentSize(int w, int h, bool nearest)
@@ -1185,8 +1311,9 @@ public sealed class GlBackend : IGpuBackend
     /// OpenGL's bottom-left origin is flipped here so callers can upload the result
     /// directly into a Bitmap without another allocation.
     /// </summary>
-    public unsafe bool ReadPresentArgb(Span<int> destination)
+    public unsafe bool ReadPresentArgb(Span<int> destination, bool rightEye = false)
     {
+        if (rightEye && _presentFboR == 0) return false;
         var count = _presentW * _presentH;
         if (!Ready || count <= 0 || destination.Length < count) return false;
         var byteCount = count * 4;
@@ -1194,7 +1321,7 @@ public sealed class GlBackend : IGpuBackend
 
         // GL_FRAMEBUFFER binds both read and draw targets and is the most
         // consistently supported path on Android GLES drivers.
-        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _presentFbo);
+        _gl.BindFramebuffer(FramebufferTarget.Framebuffer, rightEye ? _presentFboR : _presentFbo);
         fixed (byte* raw = _readback)
             _gl.ReadPixels(0, 0, (uint)_presentW, (uint)_presentH,
                 PixelFormat.Rgba, PixelType.UnsignedByte, raw);
@@ -1282,5 +1409,7 @@ public sealed class GlBackend : IGpuBackend
         if (_progPresent24 != 0) _gl.DeleteProgram(_progPresent24);
         if (_presentTex != 0) _gl.DeleteTexture(_presentTex);
         if (_presentFbo != 0) _gl.DeleteFramebuffer(_presentFbo);
+        if (_presentTexR != 0) _gl.DeleteTexture(_presentTexR);
+        if (_presentFboR != 0) _gl.DeleteFramebuffer(_presentFboR);
     }
 }

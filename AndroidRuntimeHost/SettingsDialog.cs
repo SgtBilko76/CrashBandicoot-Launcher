@@ -16,8 +16,8 @@ static class SettingsDialog
     static readonly Color Sand = Color.Rgb(244, 228, 188);
     static readonly Color Muted = Color.Rgb(177, 188, 188);
 
-    static readonly int[] ResolutionValues = [1, 2, 4, 8];
-    static readonly string[] ResolutionLabels = ["Native (1x)", "2x", "4x", "8x (4K)"];
+    static readonly int[] ResolutionValues = [1, 2, 3, 4, 8];
+    static readonly string[] ResolutionLabels = ["Native (1x)", "2x", "3x", "4x", "8x (4K)"];
     static readonly string[] FilterLabels = ["Off", "Bilinear", "Sharp bilinear", "Soft smooth"];
 
     public static void Show(Activity activity, Action? settingsApplied = null, Action? gpuLabRequested = null)

@@ -10,7 +10,7 @@
 
 This repository contains **tools and a launcher** that work with a copy of *Crash Bandicoot* you already own (PS1, NTSC-U, **SCUS-94900**). It does **not** include the game, disc images, or a ready-made game binary.
 
-Built on [RecompOne](https://github.com/BlackLabelHQ/RecompOne) (static PS1 recompilation + runtime). Current release: **1.9.4** (native WinForms launcher on Windows; CLI on Linux; Android). Still experimental — expect bugs.
+Built on [RecompOne](https://github.com/BlackLabelHQ/RecompOne) (static PS1 recompilation + runtime). Current release: **2.0.0-beta.1** (native WinForms launcher on Windows; CLI on Linux; Android; Meta Quest VR beta). Still experimental — expect bugs.
 
 ---
 <img width="1920" height="800" alt="Crash-Launcher1" src="https://github.com/user-attachments/assets/3682fe9c-0deb-466c-adbe-285a1fd7bbcc" />
@@ -93,6 +93,20 @@ CrashBandicoot.exe --run "D:\path\to\your\game.cue"
 ```
 
 All CLI commands also accept a `.chd` path. If `settings.json` already has a valid `CdPath`, `--run` / `--smoke` can omit the disc path.
+
+### Meta Quest (beta)
+
+The Android APK also runs standalone on Meta Quest 2, Pro, 3 and 3S. Install it with SideQuest or `adb install`; it appears under *Unknown sources*.
+
+1. Copy your `.chd` or `.cue` + `.bin` to the headset (for example `Download/`) and allow *All files access* when the launcher asks.
+2. Select the disc and press **Start Game** in the launcher panel. The first start prepares the game on the headset (about half a minute).
+3. The game opens in VR on a curved virtual screen, in stereo 3D: the world has real depth from the PS1's own geometry, while the HUD and menus stay at screen depth.
+
+Touch controllers: left stick = D-pad, A/B/X/Y = Cross/Circle/Square/Triangle, triggers = L1/R1, grips = L2/R2, left menu button = Start, right stick click = Select. In the headset, right stick up/down resizes the screen, right stick left/right moves the 3D depth plane, and left stick click toggles passthrough.
+
+The launcher's **Controls** screen on Quest sets the curved screen, 3D depth (0% = flat) and button mapping; **RESET VIEW** restores the default screen. A Bluetooth gamepad works too.
+
+The Android app uses the CoreCLR runtime, which .NET 10 still marks as experimental on Android. Report crashes with the headset's `adb logcat`.
 
 ### CHD discs
 
