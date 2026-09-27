@@ -10,7 +10,7 @@
 
 This repository contains **tools and a launcher** that work with a copy of *Crash Bandicoot* you already own (PS1, NTSC-U, **SCUS-94900**). It does **not** include the game, disc images, or a ready-made game binary.
 
-Built on [RecompOne](https://github.com/BlackLabelHQ/RecompOne) (static PS1 recompilation + runtime). Current release: **2.0.0-beta.1** (native WinForms launcher on Windows; CLI on Linux; Android; Meta Quest VR beta). Still experimental — expect bugs.
+Built on [RecompOne](https://github.com/BlackLabelHQ/RecompOne) (static PS1 recompilation + runtime). Current release: **2.0.0-beta.1** (native WinForms launcher on Windows; CLI on Linux; Android; Meta Quest / Pico VR beta). Still experimental — expect bugs.
 
 ---
 <img width="1920" height="800" alt="Crash-Launcher1" src="https://github.com/user-attachments/assets/3682fe9c-0deb-466c-adbe-285a1fd7bbcc" />
@@ -94,9 +94,11 @@ CrashBandicoot.exe --run "D:\path\to\your\game.cue"
 
 All CLI commands also accept a `.chd` path. If `settings.json` already has a valid `CdPath`, `--run` / `--smoke` can omit the disc path.
 
-### Meta Quest (beta)
+### Meta Quest and Pico (beta)
 
 The Android APK also runs standalone on Meta Quest 2, Pro, 3 and 3S. Install it with SideQuest or `adb install`; it appears under *Unknown sources*.
+
+**Pico** (Pico 4 / 4 Ultra / Neo 3) uses the same APK and the same OpenXR code, with Pico's controller profile and manifest markers added, but it has **not been tested on a Pico yet**. The likeliest problems are an older PICO OS whose OpenXR runtime the bundled Khronos loader cannot find (the VR view closes at once; `adb logcat -s CrashXR` shows `xrCreateInstance failed`) and a flat instead of curved screen. Reports are welcome.
 
 1. Copy your `.chd` or `.cue` + `.bin` to the headset (for example `Download/`) and allow *All files access* when the launcher asks.
 2. Select the disc and press **Start Game** in the launcher panel. The first start prepares the game on the headset (about half a minute).

@@ -33,6 +33,10 @@
       android:theme="@android:style/Theme.Material.NoActionBar">
     <meta-data android:name="com.oculus.supportedDevices" android:value="quest2|questpro|quest3|quest3s" />
     <meta-data android:name="com.oculus.vr.focusaware" android:value="true" />
+    <!-- Pico: OpenXR runtime. pvr.app.type=vr is deliberately absent; it would
+         make PICO OS open the 2D launcher as a VR app. Only VrGameActivity is
+         immersive (com.picovr.intent.category.VRAPP on its intent filter). -->
+    <meta-data android:name="pvr.sdk.version" android:value="OpenXR" />
     <meta-data
         android:name="com.google.test.loops"
         android:value="1" />

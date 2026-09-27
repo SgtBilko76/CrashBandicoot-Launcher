@@ -141,6 +141,7 @@ static XrSessionState g_session_state = XR_SESSION_STATE_UNKNOWN;
 static bool g_session_running;
 static bool g_has_refresh_rate_ext;
 static bool g_has_perf_settings_ext;
+static bool g_has_pico_controller_ext;
 static float g_refresh_rate;
 
 static XrSwapchain g_swapchain = XR_NULL_HANDLE;
@@ -496,6 +497,17 @@ static bool CreateActions(void)
 	          "xrSuggestInteractionProfileBindings"))
 		return false;
 
+	// Pico's controllers answer to a profile of their own, with the same
+	// button paths. A runtime that does not know it rejects it, which only
+	// matters on a Pico, where the Touch suggestion above is the one ignored.
+	if (g_has_pico_controller_ext) {
+		suggested.interactionProfile = Path("/interaction_profiles/bytedance/pico4_controller");
+		if (XR_FAILED(xrSuggestInteractionProfileBindings(g_instance, &suggested)))
+			LOGW("Pico 4 controller profile rejected by this runtime");
+		else
+			LOGI("Pico 4 controller bindings suggested");
+	}
+
 	XrSessionActionSetsAttachInfo attach = { XR_TYPE_SESSION_ACTION_SETS_ATTACH_INFO };
 	attach.countActionSets = 1;
 	attach.actionSets = &g_action_set;
@@ -678,10 +690,12 @@ static bool CreateInstance(void)
 			g_has_passthrough_ext = true;
 		else if (!strcmp(name, XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME))
 			g_has_perf_settings_ext = true;
+		else if (!strcmp(name, XR_BD_CONTROLLER_INTERACTION_EXTENSION_NAME))
+			g_has_pico_controller_ext = true;
 	}
 	free(available);
 
-	const char *extensions[6] = {
+	const char *extensions[7] = {
 		XR_KHR_ANDROID_CREATE_INSTANCE_EXTENSION_NAME,
 		XR_KHR_OPENGL_ES_ENABLE_EXTENSION_NAME,
 	};
@@ -694,6 +708,8 @@ static bool CreateInstance(void)
 		extensions[extension_count++] = XR_FB_PASSTHROUGH_EXTENSION_NAME;
 	if (g_has_perf_settings_ext)
 		extensions[extension_count++] = XR_EXT_PERFORMANCE_SETTINGS_EXTENSION_NAME;
+	if (g_has_pico_controller_ext)
+		extensions[extension_count++] = XR_BD_CONTROLLER_INTERACTION_EXTENSION_NAME;
 	LOGI("extensions: refresh rate %d, cylinder %d, passthrough %d",
 	     g_has_refresh_rate_ext, g_has_cylinder_ext, g_has_passthrough_ext);
 

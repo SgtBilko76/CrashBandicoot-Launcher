@@ -5,12 +5,18 @@ using Silk.NET.Core.Contexts;
 
 namespace CrashBandicoot.AndroidRuntime.QuestVr;
 
-/// <summary>True on Meta Quest headsets, where the game runs in OpenXR.</summary>
+/// <summary>
+/// True on standalone VR headsets (Meta Quest, Pico), where the game runs in
+/// OpenXR instead of the phone's TextureView.
+/// </summary>
 static class QuestDevice
 {
-    public static bool IsQuest(Context context) =>
+    public static bool IsVrHeadset(Context context) =>
         context.PackageManager?.HasSystemFeature("oculus.hardware.standalone_vr") == true ||
-        string.Equals(Android.OS.Build.Manufacturer, "Oculus", StringComparison.OrdinalIgnoreCase);
+        Android.OS.Build.Manufacturer is { } maker &&
+        (maker.Equals("Oculus", StringComparison.OrdinalIgnoreCase) ||
+         maker.Equals("Meta", StringComparison.OrdinalIgnoreCase) ||
+         maker.StartsWith("Pico", StringComparison.OrdinalIgnoreCase));
 }
 
 /// <summary>Bindings to libcrashxr.so (QuestVr/Native/crashxr.c).</summary>

@@ -33,7 +33,8 @@ namespace CrashBandicoot.AndroidRuntime.QuestVr;
                            ConfigChanges.UiMode)]
 [IntentFilter(
     new[] { Intent.ActionMain },
-    Categories = new[] { "com.oculus.intent.category.VR" })]
+    // Each vendor ignores the other's category: Meta Quest, Pico.
+    Categories = new[] { "com.oculus.intent.category.VR", "com.picovr.intent.category.VRAPP" })]
 public sealed class VrGameActivity : Activity
 {
     public const string ExtraGameDll = "game_dll";

@@ -592,7 +592,7 @@ public sealed class MainActivity : Activity
                     GameStore.WriteManifest(validation.Fingerprint, cuePath, validation.BinPath, gameDll);
                 }
 
-                if (QuestDevice.IsQuest(this))
+                if (QuestDevice.IsVrHeadset(this))
                 {
                     // The headset runs the core in the immersive activity.
                     SetStatus("Entering VR…");
@@ -737,7 +737,7 @@ public sealed class MainActivity : Activity
 
         // ADB: --ei depth_3d <0..100> saves the Quest 3D depth, as VR Controls does.
         var depth3D = Intent?.GetIntExtra("depth_3d", -1) ?? -1;
-        if (depth3D >= 0 && QuestDevice.IsQuest(this))
+        if (depth3D >= 0 && QuestDevice.IsVrHeadset(this))
         {
             new QuestVrSettings(this).SetDepth3D(depth3D);
             Android.Util.Log.Info("CrashXR", $"3D depth set to {depth3D}%");

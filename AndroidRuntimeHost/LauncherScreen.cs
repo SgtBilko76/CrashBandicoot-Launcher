@@ -689,7 +689,7 @@ sealed class LauncherScreen : View
                 // On a headset the touch overlay does not exist; Controls maps the Touch controllers.
                 Post(() =>
                 {
-                    if (QuestVr.QuestDevice.IsQuest(_activity)) QuestVr.QuestControlsDialog.Show(_activity);
+                    if (QuestVr.QuestDevice.IsVrHeadset(_activity)) QuestVr.QuestControlsDialog.Show(_activity);
                     else TouchControlsDialog.Show(_activity);
                 });
                 break;
