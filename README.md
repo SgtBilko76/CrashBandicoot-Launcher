@@ -110,6 +110,8 @@ The launcher's **Controls** screen on Quest sets the curved screen, 3D depth (0%
 
 The Android app uses the CoreCLR runtime, which .NET 10 still marks as experimental on Android. Report crashes with the headset's `adb logcat`.
 
+![Crash Bandicoot Launcher controller mapping](docs/controls.webp)
+
 ### CHD discs
 
 Windows, Linux, and the unified Android app read CHD directly during preparation and gameplay; no BIN extraction or external converter is needed to play. The supported layout is a standalone CD image with one `MODE2/2352` track, matching the NTSC-U Crash disc. Other regions, multi-track layouts, DVD/GD-ROM images, and CHDs requiring a parent are not supported.
