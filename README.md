@@ -96,6 +96,8 @@ All CLI commands also accept a `.chd` path. If `settings.json` already has a val
 
 ### Meta Quest and Pico (beta)
 
+**Download, install guide, controls and pictures: [portroyale.online/crash-bandicoot.html](https://portroyale.online/crash-bandicoot.html)**
+
 The Android APK also runs standalone on Meta Quest 2, Pro, 3 and 3S. Install it with SideQuest or `adb install`; it appears under *Unknown sources*.
 
 **Pico** (Pico 4 / 4 Ultra / Neo 3) uses the same APK and the same OpenXR code, with Pico's controller profile and manifest markers added, but it has **not been tested on a Pico yet**. The likeliest problems are an older PICO OS whose OpenXR runtime the bundled Khronos loader cannot find (the VR view closes at once; `adb logcat -s CrashXR` shows `xrCreateInstance failed`) and a flat instead of curved screen. Reports are welcome.
